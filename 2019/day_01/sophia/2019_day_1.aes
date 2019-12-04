@@ -1,0 +1,19 @@
+include "List.aes"
+
+contract AdventOfCode2019Day01 =
+
+    entrypoint solve_part1(input: list(int)) : int =
+        List.foldl((acc, i) => acc + fuel(i), 0, input)
+
+    entrypoint solve_part2(input: list(int)) : int =
+        List.foldl((acc, i) => acc + recursive_fuel(i), 0, input)
+
+    function fuel(mass: int) : int =
+        mass / 3 - 2
+
+    function recursive_fuel(mass: int) : int =
+        let f : int = fuel(mass)
+        if (f < 1)
+            0
+        else
+            f + recursive_fuel(f)
