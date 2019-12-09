@@ -1,0 +1,93 @@
+include "List.aes"
+include "Pair.aes"
+
+contract AdventOfCode2019Day04 =
+
+  entrypoint test() =
+    require(true == check_1([1,1,1,1,1,1]), "test 1 failed")
+    require(true == check_1([2,2,3,4,5,0]), "test 2 failed")
+    require(false == check_1([1,2,3,7,8,9]), "test 3 failed")
+    require(true == check_2([1,1,2,2,3,3]), "test 4 failed")
+    require(true == check_2([2,4,5,6,6,7]), "test 5 failed")
+    require(false == check_2([1,2,3,4,4,4]), "test 6 failed")
+    require(true == check_1([1,1,1,1,2,2]), "test 7 failed")
+    true
+
+  entrypoint solve_1() =
+    switch(input())
+      (current, upper) =>
+        solve_int(0, current, upper, check_1)
+
+  entrypoint solve_2() =
+    switch(input())
+      (current, upper) =>
+        solve_int(0, current, upper, check_2)
+
+  function solve_int(n, current, upper, check_fun) =
+    let n' = if (check_fun(current) == true) n + 1
+             else                            n
+    if (current == upper)
+      n'
+    else
+      solve_int(n', next(current, upper), upper, check_fun)
+
+  function next(digits : list(int), limit : list(int)) : list(int) =
+    if (digits == limit)
+      digits
+    else
+      let res = List.foldr(increment_digits, ([], false, true), digits)
+      switch(res)
+        (next', _, valid) =>
+          if (valid == true) next'
+          else               next(next', limit)
+
+  function increment_digits(n : int, acc : (list(int) * bool * bool)) : (list(int) * bool * bool) =
+    switch(acc)
+      (digits, done, valid) =>
+        switch((n, digits, done, valid))
+          (_, [], true, _) =>
+            ([n], true, valid)
+          (_, n0 :: digits, true, _) =>
+            (n :: n0 :: digits, true, valid && n =< n0)
+          (9, [], _, valid) =>
+            ([0], false, valid)
+          (9, n0 :: digits, done, valid) =>
+            (0 :: n0 :: digits, false, valid && 0 =< n0)
+          (_, [], _, valid) =>
+            ([n+1], true, valid)
+          (_, 9 :: digits, done, valid) =>
+            (n+1 :: 9 :: digits, true, valid && (n+1) =< 9)
+          (_, n0 :: digits, done, valid) =>
+            (n+1 :: n0 :: digits, true, valid && (n+1) =< n0)
+
+  function check_1(digits) =
+    let res = List.foldl((acc, n) =>
+      switch(acc)
+        (n', check) =>
+          let check' = check || (n == n')
+          (n, check'),
+          (-1, false), digits)
+    switch(res)
+      (_, check) =>
+        check
+
+  function check_2(digits) =
+    let res = List.foldl((acc, n) =>
+      switch(acc)
+        (n2, n1, n0, check, l) =>
+          if   (l == 1)
+            let check' = check || (n == n2 && n2 != n1) || (n2 == n1 && n != n2 && n1 != n0)
+            (n, n2, n1, check', 0)
+          elif (n0 == -1)
+            let check' = check || (n != n2 && n2 == n1)
+            (n, n2, n1, check', l-1)
+          else
+            let check' = check || (n != n2 && n2 == n1 && n1 != n0)
+            (n, n2, n1, check', l-1),
+            (-1, -2, -2, false, List.length(digits)), digits)
+    switch (res)
+      (_, _, _, check, _) =>
+        check
+
+  function input() =
+    ([2,4,0,9,2,0], [7,8,9,8,5,7])
