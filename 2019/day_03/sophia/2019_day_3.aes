@@ -7,17 +7,19 @@ contract AdventOfCode2019Day03 =
   type steps_record = map(wire_id, int)
   type input = list(string)
   type position = int * int
-  type plan = map(position, wire_id * steps_record)
+  type plan = map(position, int * steps_record)
+  type result_plan = int * plan
   type wire = list(char * int)
   type tagged_wire = wire_id * wire
+  type pos_check_fun = (position, steps_record) => int
 
   entrypoint test() : bool =
     let input1 = [[('R',75),('D',30),('R',83),('U',83),('L',12),('D',49),('R',71),('U',7),('L',72)],
                   [('U',62),('R',66),('U',55),('R',34),('D',71),('R',55),('D',58),('R',83)]]
     let input2 = [[('R',98),('U',47),('R',26),('D',63),('R',33),('U',87),('L',62),('D',20),('R',33),('U',53),('R',51)],
                   [('U',98),('R',91),('D',20),('R',16),('D',67),('R',40),('U',7),('R',15),('U',6),('R',7)]]
-    let result1 = result(solve_1(prepare(input1)))
-    let result2 = result(solve_1(prepare(input2)))
+    let result1 = solve_1(prepare(input1))
+    let result2 = solve_1(prepare(input2))
     require(159 == result1, String.concat("test 1 failed: ", Int.to_str(result1)))
     require(135 == result2, String.concat("test 2 failed: ", Int.to_str(result2)))
     //assert(610 == result(solve_2(["('R',75),('D',30),('R',83),('U',83),('L',12),('D',49),('R',71),('U',7),('L',72",
@@ -28,10 +30,10 @@ contract AdventOfCode2019Day03 =
     true
 
   entrypoint solve_part_1() : int =
-    result(solve_1(prepare(input())))
+    solve_1(prepare(input()))
 
   entrypoint solve_part_2() : int =
-    result(solve_2(prepare(input())))
+    solve_2(prepare(input()))
 
   function result(points : list(int)) : int =
     switch(List.first(points))
@@ -43,62 +45,72 @@ contract AdventOfCode2019Day03 =
   function prepare(wires : list(wire)) : list(tagged_wire) =
     List.zip(List.from_to(1, List.length(wires)), wires)
 
-  function solve_1(wires : list(tagged_wire)) : list(int) =
-    let plan = run_wires(wires, {})
-    let points = Map.to_list(plan)
-    let points' = List.foldl((acc, p) =>
-      switch(p)
-        ((pos_x, pos_y), (n, _)) =>
-          if (n > 1)
-            let l = abs(pos_x) + abs(pos_y)
-            l :: acc
-          else
-            acc, [], points)
-    List.sort((a, b) => a < b, points')
+  function solve_1(wires : list(tagged_wire)) : int =
+    let r_plan = run_wires(distance, wires, (0, {}))
+    switch(r_plan)
+      (n, _) =>
+        n
 
-  function solve_2(wires : list(tagged_wire)) : list(int) =
-    let plan = run_wires(wires, {})
-    let points = Map.to_list(plan)
-    let points' = List.foldl((acc, p) =>
-      switch(p)
-        (_, (n, steps_record)) =>
-          if (n > 1)
-            let l = List.sum([Pair.snd(r) | r <- Map.to_list(steps_record)])
-            l :: acc
-          else
-            acc, [], points)
-    List.sort((a, b) => a < b, points')
+  function distance(pos : position, steps : steps_record) : int =
+    switch (pos)
+      (x, y) =>
+        abs(x) + abs(y)
 
-  function run_wires(wires : list(tagged_wire), plan : plan) : plan =
-    List.foldl((acc, w) =>
+  function sum_steps(pos : position, steps : steps_record) : int =
+    let steps' = Map.to_list(steps)
+    List.sum([Pair.snd(s) | s <- steps'])
+
+  function check_position(acc : int, pos : position, info : (int * steps_record), fun : pos_check_fun) : int =
+    switch(info)
+      (n, steps) =>
+        if (n > 1)
+          let l = fun(pos, steps)
+          if (l < acc || acc == 0) l
+          else                     acc
+        else
+          acc
+
+  function solve_2(wires : list(tagged_wire)) : int =
+    let r_plan = run_wires(sum_steps, wires, (0, {}))
+    switch(r_plan)
+      (n, _) =>
+        n
+
+  function run_wires(fun : pos_check_fun, wires : list(tagged_wire), r_plan : result_plan) : result_plan =
+    List.foldl((r_plan', w) =>
       switch(w)
         (wire_id, wire) =>
-          run_wire(wire_id, wire, (0, 0), 0, acc), plan, wires)
+          run_wire(wire_id, wire, (0, 0), 0, r_plan', fun), r_plan, wires)
 
-  function run_wire(wire_id : int, wire : wire, pos : position, steps : int, plan : plan) : plan =
+
+  function run_wire(wire_id : int, wire : wire, pos : position, steps : int, r_plan : result_plan, fun : pos_check_fun) : result_plan =
     switch(wire)
       [] =>
-        plan
+        r_plan
       (d, l) :: rest =>
-        switch (step_wire(d, l, pos, steps, wire_id, plan))
-          (pos1, plan1, steps1) =>
-            run_wire(wire_id, rest, pos1, steps1, plan1)
+        switch (step_wire(d, l, pos, steps, wire_id, r_plan, fun))
+          (pos1, r_plan1, steps1) =>
+            run_wire(wire_id, rest, pos1, steps1, r_plan1, fun)
 
-  function step_wire(dir : char, len : int, pos : position, steps : int, wire_id : int, plan : plan) : (position * plan * int) =
+  function step_wire(dir : char, len : int, pos : position, steps : int, wire_id : int, r_plan : result_plan, fun : pos_check_fun) : (position * result_plan * int) =
     let pos' = update_position(pos, dir, len)
-    let plan' = List.foldl((acc, n) => step_wire'(dir, pos, steps, wire_id, acc, n), plan, List.from_to(1, len))
-    (pos', plan', steps+len)
+    let r_plan' = List.foldl((acc, n) => step_wire'(dir, pos, steps, wire_id, acc, fun, n), r_plan, List.from_to(1, len))
+    (pos', r_plan', steps+len)
 
-  function step_wire'(dir : char, pos : position, steps : int, wire_id : int, plan : plan, n : int) : plan =
+  function step_wire'(dir : char, pos : position, steps : int, wire_id : int, r_plan : result_plan, fun : pos_check_fun, n : int) : result_plan =
     let pos_n = update_position(pos, dir, n)
-    switch (plan[pos_n = (0, {})])
-      (count, steps_record) =>
-        let entry = switch(Map.lookup(wire_id, steps_record))
-          None =>
-            (count+1, steps_record{[wire_id] = steps+n})
-          Some(_) =>
-            (count, steps_record)
-        plan{[pos_n] = entry}
+    switch (r_plan)
+      (acc, plan) =>
+        switch (plan[pos_n = (0, {})])
+          (count, steps_record) =>
+            let entry = switch(Map.lookup(wire_id, steps_record))
+              None =>
+                (count+1, steps_record{[wire_id] = steps+n})
+              Some(_) =>
+                (count, steps_record)
+            let plan' = plan{[pos_n] = entry}
+            let acc' = check_position(acc, pos_n, entry, fun)
+            (acc', plan')
 
   function update_position(pos : position, dir : char, len : int) : position =
     switch (pos)
